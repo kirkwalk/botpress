@@ -1,13 +1,16 @@
 module.exports = {
-  // ingoing: function(event, next) {
-
+  // incoming: function(event, next) {
+  //
   // },
+
   // outgoing: function(event, next) {
-
+  //
   // },
+
   init: function(bp) {
 
   },
+
   ready: function(bp) {
 
   }
