@@ -91,7 +91,25 @@ const createMiddleware = function(bp, middlewareName) {
   }
 }
 
+/**
+ * Inject middleware system to botpress
+ *
+ * @param {Object} dp - botpress
+ *
+ * @example
+ *
+ * // all middleware registrations need to be finished before loadMiddleware
+ * // and remember that order matters
+ * bp.registerMiddleware(m1)
+ * bp.registerMiddleware(m2)
+ *
+ * bp.loadMiddlewares()
+ *
+ * @note every time after changing the middle configs, we need to reinvoke `loadMiddlewares()`
+ * to make it works
+ */
 module.exports = function(bp) {
+  // add noop (with warn log) if this be accidentally used before `loadMiddlewares`
   bp.incoming = bp.outgoing = function() {
     let message = 'Middleware called before middlewares have been loaded. This is a no-op.'
      + ' Have you forgotten to call `bp.loadMiddlewares()` in your bot?'
@@ -103,6 +121,7 @@ module.exports = function(bp) {
     bp.logger.warn(message)
   }
 
+  // ---- start of middleware configs (the order management) ----
   const middlewaresFilePath = path.join(bp.dataLocation, 'middlewares.json')
 
   const readMiddlewaresCustomizations = () => {
@@ -128,6 +147,7 @@ module.exports = function(bp) {
     bp.middlewareCustomizations = {}
     writeMiddlewaresCustomizations()
   }
+  // ---- end of middleware configs (the order management) ----
 
   bp.middlewares = []
   bp.middlewareCustomizations = readMiddlewaresCustomizations()
@@ -159,6 +179,13 @@ module.exports = function(bp) {
     bp.middlewares.push(middleware)
   }
 
+  /**
+   * getMiddlewares
+   *
+   * get list of middlewares, the order is determined by configs
+   *
+   * @return {Array}
+   */
   bp.getMiddlewares = () => {
     return _.orderBy(bp.middlewares.map(middleware => {
       const customization = bp.middlewareCustomizations[middleware.name]
@@ -169,6 +196,11 @@ module.exports = function(bp) {
     }), 'order')
   }
 
+  /**
+   * loadMiddlewares
+   *
+   * rebuild middleware chains and apply license
+   */
   bp.loadMiddlewares = () => {
     bp.incoming = createMiddleware(bp, 'incoming')
     bp.outgoing = createMiddleware(bp, 'outgoing')

@@ -68,7 +68,7 @@ module.exports = (bp) => {
       const license = packageJSON.license
       const botName = packageJSON.name
       const author = packageJSON.author
-      const response = "Bot: " + botName + "\n" 
+      const response = "Bot: " + botName + "\n"
         + "Created by: " + author + "\n"
         + "License: " + license + "\n"
         + "Botpress: " + bp.version
