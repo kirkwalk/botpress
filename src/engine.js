@@ -5,6 +5,29 @@ import fs from 'fs'
 
 import licensing from './licensing'
 
+/**
+ * engine.js
+ *
+ * For botpress middleware registration and dispatch
+ */
+
+/**
+ * createMiddleware
+ *
+ * @return {Function} function that can be used as registration function also dispatcher function
+ *
+ * @example
+ *
+ * const m = createMiddleware(dp, 'outgoing')
+ *
+ * // When as registration funciton:
+ * m((arg1, arg2, next) => { ... })
+ *
+ * // When as dispatcher function
+ * m(arg1, arg2)
+ *
+ * @note registration order matters
+ */
 const createMiddleware = function(bp, middlewareName) {
 
   const _use = mware()
