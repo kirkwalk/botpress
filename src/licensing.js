@@ -13,6 +13,8 @@ module.exports = (bp) => {
 
     if (!fs.existsSync(packagePath)) {
       log('warn', 'Could not find bot\'s package.json file')
+
+      // QUESTION: why return empty array? (there are several in this file
       return []
     }
 
@@ -62,6 +64,9 @@ module.exports = (bp) => {
     fs.writeFileSync(getPackageJSONPath(), JSON.stringify(packageJSON, null, 2))
   })
 
+  /**
+   * applyLicenseMiddleware
+   */
   const applyLicenseMiddleware = () => {
     bp.hear(/^BOT_LICENSE$/, (event, next) => {
       let packageJSON = JSON.parse(fs.readFileSync(getPackageJSONPath()))

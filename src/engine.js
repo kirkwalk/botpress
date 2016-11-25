@@ -199,7 +199,7 @@ module.exports = function(bp) {
   /**
    * loadMiddlewares
    *
-   * rebuild middleware chains and apply license
+   * rebuild middleware chains and add "license info" middleware
    */
   bp.loadMiddlewares = () => {
     bp.incoming = createMiddleware(bp, 'incoming')
