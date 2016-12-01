@@ -17,9 +17,9 @@ const setupSocket = function(app, bp) {
   const server = http.createServer(app)
   const io = socketio(server)
 
-  if (bp.requiresAuth) {
+  if (bp.botfile.login.enabled) {
     io.use(socketioJwt.authorize({
-      secret: bp.getSecret(),
+      secret: bp.security.getSecret(),
       handshake: true
     }))
   }
@@ -75,7 +75,7 @@ const serveApi = function(app, bp) {
   app.use(maybeApply('bodyParser.urlencoded', bodyParser.urlencoded({ extended: true })))
 
   app.post('/api/login', (req, res) => {
-    const result = bp.login(req.body.user, req.body.password, req.ip)
+    const result = bp.security.login(req.body.user, req.body.password, req.ip)
     res.send(result)
   })
 
@@ -86,7 +86,7 @@ const serveApi = function(app, bp) {
   })
 
   app.get('/api/modules', (req, res) => {
-    const modules = _.map(bp.modules, (module) => {
+    const modules = _.map(bp._loadedModules, (module) => {
       return {
         name: module.name,
         homepage: module.homepage,
@@ -123,22 +123,22 @@ const serveApi = function(app, bp) {
   })
 
   app.get('/api/module/all', (req, res) => {
-    bp.module.getListAllModules()
+    bp.modules.listAllCommunityModules()
     .then(modules => res.send(modules))
   })
 
   app.get('/api/module/popular', (req, res) => {
-    bp.module.getPopular()
+    bp.modules.listPopularCommunityModules()
     .then(popular => res.send(popular))
   })
 
   app.get('/api/module/featured', (req, res) => {
-    bp.module.getFeatured()
+    bp.modules.listFeaturedCommunityModules()
     .then(featured => res.send(featured))
   })
 
   app.get('/api/module/hero', (req, res) => {
-    bp.module.getRandomHero()
+    bp.modules.getRandomCommunityHero()
     .then(hero => res.send(hero))
   })
 
@@ -166,7 +166,7 @@ const serveApi = function(app, bp) {
 
   app.post('/api/module/install/:name', (req, res) => {
     const { name } = req.params
-    bp.module.install(name)
+    bp.modules.install(name)
     .then(() => {
       res.sendStatus(200)
       bp.restart(1000)
@@ -178,7 +178,7 @@ const serveApi = function(app, bp) {
 
   app.delete('/api/module/uninstall/:name', (req, res) => {
     const { name } = req.params
-    bp.module.uninstall(name)
+    bp.modules.uninstall(name)
     .then(() => {
       res.sendStatus(200)
       bp.restart(1000)
@@ -237,8 +237,8 @@ const serveApi = function(app, bp) {
 
 const serveStatic = function(app, bp) {
 
-  for (let name in bp.modules) {
-    const module = bp.modules[name]
+  for (let name in bp._loadedModules) {
+    const module = bp._loadedModules[name]
     const bundlePath = path.join(module.root, module.settings.webBundle || 'bin/web.bundle.js')
     const requestPath = `/js/modules/${name}.js`
 
@@ -255,12 +255,13 @@ const serveStatic = function(app, bp) {
   }
 
   app.use('/js/env.js', (req, res) => {
+    const { tokenExpiry, enabled } = bp.botfile.login
     res.contentType('text/javascript')
     res.send(`(function(window) {
       window.NODE_ENV = "${process.env.NODE_ENV || 'development'}";
       window.DEV_MODE = ${util.isDeveloping};
-      window.AUTH_ENABLED = ${bp.requiresAuth};
-      window.AUTH_TOKEN_DURATION = ${ms(bp.authTokenExpiry)};
+      window.AUTH_ENABLED = ${enabled};
+      window.AUTH_TOKEN_DURATION = ${ms(tokenExpiry)};
     })(window || {})`)
   })
 
@@ -277,11 +278,11 @@ const serveStatic = function(app, bp) {
 }
 
 const authenticationMiddleware = (bp) => function(req, res, next) {
-  if (!bp.requiresAuth) {
+  if (!bp.botfile.login.enabled) {
     return next()
   }
 
-  if (bp.authenticate(req.headers.authorization)) {
+  if (bp.security.authenticate(req.headers.authorization)) {
     next()
   } else {
     res.status(401).location('/login').end()
@@ -302,7 +303,7 @@ class WebServer {
 
     server.listen(3000, () => { // TODO Port in config
       this.bp.events.emit('ready')
-      for (var mod of _.values(this.bp.modules)) {
+      for (var mod of _.values(this.bp._loadedModules)) {
         mod.handlers.ready && mod.handlers.ready(this.bp)
       }
 

@@ -3,21 +3,21 @@ import 'source-map-support/register'
 import path from 'path'
 import fs from 'fs'
 import _ from 'lodash'
-import domain from 'domain'
 import cluster from 'cluster'
 
-import WebServer from './server'
-import createMiddlewares from './middlewares'
 import EventBus from './bus'
+
+import createMiddlewares from './middlewares'
 import createLogger from './logger'
 import createSecurity from './security'
-import createNotif from './notif'
+import createNotifications from './notifications'
 import createHearMiddleware from './hear'
-import Database from './database'
-import Module from './module'
-import Licensing from './licensing'
+import createDatabase from './database'
+import createLicensing from './licensing'
 import createAbout from './about'
-import {scanModules, loadModules} from './module_loader'
+import createModules from './modules'
+
+import WebServer from './server'
 
 import {
   isDeveloping,
@@ -75,8 +75,6 @@ class botpress {
    * @param {string} obj.botfile - the config path
    */
   constructor({ botfile }) {
-    this.version = getVersion()
-
     /**
      * The project location, which is the folder where botfile.js located
      */
@@ -103,24 +101,34 @@ class botpress {
     // the bot's location is kept in this.projectLocation
     process.chdir(path.join(__dirname, '../'))
 
+    const version = getVersion()
+
     const {projectLocation, botfile} = this
 
     const dataLocation = getDataLocation(botfile.dataDir, projectLocation)
+    const dbLocation = path.join(dataLocation, 'db.sqlite')
+
     const logger = createLogger(dataLocation, botfile.log)
     mkdirIfNeeded(dataLocation, logger)
 
     const security = createSecurity(dataLocation, botfile.login)
 
-    const modules = scanModules(projectLocation, logger)
+    const modules = createModules(logger, projectLocation, dataLocation)
+
+    const moduleDefinitions = modules._scan()
+
     const events = new EventBus()
-    const notifications = createNotif(dataLocation, botfile.notification, events, logger)
+    const notifications = createNotifications(dataLocation, botfile.notification, moduleDefinitions, events, logger)
     const about = createAbout(projectLocation)
-    const middlewares = createMiddlewares(this, projectLocation, logger)
+    const licensing = createLicensing(projectLocation)
+    const middlewares = createMiddlewares(this, dataLocation, projectLocation, logger)
     const {hear, middleware: hearMiddleware} = createHearMiddleware()
+    const db = createDatabase(dbLocation)
 
     middlewares.register(hearMiddleware)
 
     _.assign(this, {
+      version,
       dataLocation,
       logger,
       security, // login, authenticate, getSecret
@@ -128,39 +136,35 @@ class botpress {
       notifications,    // load, save, send
       about,
       middlewares,
-      hear
-      // TODO To be continued
+      hear,
+      licensing,
+      modules,
+      db
     })
 
-    // ----- the following haven't been finished -----
-    const dbLocation = path.join(this.dataLocation, 'db.sqlite')
-    this.db = Database(dbLocation)
+    const loadedModules = modules._load(moduleDefinitions, this)
 
-    this.module = Module(this)
-    this.licensing = Licensing(this)
+    _.assign(this, {
+      _loadedModules: loadedModules
+    })
 
-    this.modules = loadModules(modules, this, logger)
-
-    const server = this.server = new WebServer({ botpress: this })
+    const server = new WebServer({ botpress: this })
     server.start()
 
-    // load the bot's entry point
-    const botDomain = domain.create()
-    const self = this
+    const projectEntry = require(projectLocation)
+    if (typeof(projectEntry) === 'function') {
+      projectEntry.call(projectEntry, this)
+    } else {
+      logger.error('[FATAL] The bot entry point must be a function that takes an instance of bp')
+      process.exit(1)
+    }
 
-    botDomain.on('error', function(err) {
-      self.logger.error('(fatal) An unhandled exception occured in your bot', err)
+    process.on('uncaughtException', err => {
+      logger.error('(fatal) An unhandled exception occured in your bot', err)
       if (isDeveloping) {
-        self.logger.error(err.stack)
+        logger.error(err.stack)
       }
-      return process.exit(1)
-    })
-
-    botDomain.run(function() {
-      const projectEntry = require(projectLocation)
-      if (typeof(projectEntry) === 'function') {
-        projectEntry.call(projectEntry, self)
-      }
+      process.exit(1)
     })
   }
 
